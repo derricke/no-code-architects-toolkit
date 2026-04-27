@@ -14,26 +14,24 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-
-
 from flask import Blueprint, request, jsonify
 from services.authentication import authenticate
 from app_utils import validate_payload, queue_task_wrapper
-from services.v1.s3.upload import stream_upload_to_s3
+from services.v1.gcp.upload import stream_upload_to_gcs
 import os
 import json
 import logging
 
 logger = logging.getLogger(__name__)
-v1_s3_upload_bp = Blueprint('v1_s3_upload', __name__)
+v1_gcp_upload_bp = Blueprint('v1_gcp_upload', __name__)
 
-@v1_s3_upload_bp.route('/v1/s3/upload', methods=['POST'])
+@v1_gcp_upload_bp.route('/v1/gcp/upload', methods=['POST'])
 @authenticate
 @validate_payload({
     "type": "object",
     "properties": {
-        "file_url": {"type": "string", "format": "uri"},
         "filename": {"type": "string"},
+        "file_url": {"type": "string", "format": "uri"},
         "public": {"type": "boolean"},
         "download_headers": {"type": "object"},
         "webhook_url": {"type": "string", "format": "uri"},
@@ -43,22 +41,20 @@ v1_s3_upload_bp = Blueprint('v1_s3_upload', __name__)
     "additionalProperties": False
 })
 @queue_task_wrapper(bypass_queue=False)
-def s3_upload_endpoint(job_id, data):
+def gcp_upload_endpoint(job_id, data):
     try:
-        file_url = data.get('file_url')
         filename = data.get('filename')  # Optional, will default to original filename if not provided
         make_public = data.get('public', False)  # Default to private
         download_headers = data.get('download_headers')  # Optional headers for authentication
         
-        logger.info(f"Job {job_id}: Starting S3 streaming upload from {file_url}")
+        # Handle file upload from URL
+        file_url = data.get('file_url')
+        logger.info(f"Job {job_id}: Starting GCS streaming upload from {file_url}")
+        result = stream_upload_to_gcs(file_url, filename, make_public, download_headers)
         
-        # Call the service function to handle the upload
-        result = stream_upload_to_s3(file_url, filename, make_public, download_headers)
-        
-        logger.info(f"Job {job_id}: Successfully uploaded to S3")
-        
-        return result, "/v1/s3/upload", 200
+        logger.info(f"Job {job_id}: Successfully uploaded to GCS")
+        return result, "/v1/gcp/upload", 200
         
     except Exception as e:
-        logger.error(f"Job {job_id}: Error streaming upload to S3 - {str(e)}")
-        return str(e), "/v1/s3/upload", 500
+        logger.error(f"Job {job_id}: Error uploading to GCS - {str(e)}")
+        return str(e), "/v1/gcp/upload", 500

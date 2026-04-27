@@ -1,5 +1,5 @@
 # Base image
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 # Install system dependencies, build tools, and libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libaom-dev \
     libdav1d-dev \
     librav1e-dev \
-    libsvtav1-dev \
+    libsvtav1enc-dev \
     libzimg-dev \
     libwebp-dev \
     git \
@@ -41,6 +41,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtool \
     libfribidi-dev \
     libharfbuzz-dev \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libxcomposite1 \
+    libxrandr2 \
+    libxdamage1 \
+    libgbm1 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libpangoft2-1.0-0 \
+    libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install SRT from source (latest version using cmake)
@@ -165,6 +177,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install openai-whisper && \
+    pip install playwright && \
     pip install jsonschema 
 
 # Create the appuser 
@@ -177,6 +190,9 @@ RUN chown appuser:appuser /app
 USER appuser
 
 RUN python -c "import os; print(os.environ.get('WHISPER_CACHE_DIR')); import whisper; whisper.load_model('base')"
+
+# Install Playwright Chromium browser as appuser
+RUN playwright install chromium
 
 # Copy the rest of the application code
 COPY . .
@@ -193,6 +209,7 @@ gunicorn --bind 0.0.0.0:8080 \
     --timeout ${GUNICORN_TIMEOUT:-300} \
     --worker-class sync \
     --keep-alive 80 \
+    --config gunicorn.conf.py \
     app:app' > /app/run_gunicorn.sh && \
     chmod +x /app/run_gunicorn.sh
 
